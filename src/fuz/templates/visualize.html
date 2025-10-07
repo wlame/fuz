@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Pattern Embeddings 3D Visualization</title>
+        <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                background: #1a1a1a;
+                color: #fff;
+                overflow: hidden;
+                height: 100vh;
+            }
+            .hoverlayer .hovertext,
+            .hoverlayer .hovertext text,
+            .hoverlayer .hovertext path {
+                max-width: 200px !important;
+                width: 200px !important;
+                max-height: 600px !important;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                white-space: pre-wrap !important;
+                word-wrap: break-word !important;
+                word-break: break-word !important;
+                overflow-wrap: break-word !important;
+                font-size: 12px !important;
+                line-height: 1.4 !important;
+            }
+            .hoverlayer .hovertext .name {
+                max-width: 200px !important;
+                width: 200px !important;
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                padding: 10px;
+                box-sizing: border-box;
+            }
+            h1 {
+                margin: 0 0 5px 0;
+                font-size: 24px;
+            }
+            .subtitle {
+                margin: 0 0 10px 0;
+                font-size: 14px;
+                color: #888;
+            }
+            .controls {
+                background: #2a2a2a;
+                padding: 15px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+                flex-shrink: 0;
+            }
+            .control-group {
+                display: inline-block;
+                margin-right: 20px;
+                margin-bottom: 10px;
+            }
+            label {
+                display: inline-block;
+                margin-right: 10px;
+                font-weight: 500;
+            }
+            select,
+            input,
+            button {
+                padding: 8px 12px;
+                border-radius: 4px;
+                border: 1px solid #444;
+                background: #333;
+                color: #fff;
+                font-size: 14px;
+            }
+            button {
+                background: #0066cc;
+                border: none;
+                cursor: pointer;
+                font-weight: 500;
+            }
+            button:hover {
+                background: #0052a3;
+            }
+            #plot {
+                background: #2a2a2a;
+                border-radius: 8px;
+                flex: 1;
+                min-height: 0;
+            }
+            .info {
+                padding: 10px 15px;
+                background: #2a2a2a;
+                border-radius: 8px;
+                flex-shrink: 0;
+                font-size: 14px;
+            }
+            .loading {
+                text-align: center;
+                padding: 40px;
+                font-size: 18px;
+                color: #888;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🌌 Pattern Embeddings 3D Visualization</h1>
+            <p class="subtitle">
+                Interactive 3D visualization of high-dimensional embeddings
+                projected into 3D space
+            </p>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label for="model">Embedding Model:</label>
+                    <select id="model">
+                        <option value="minilm">MiniLM-L6-v2 (384D)</option>
+                        <option value="mpnet">MPNet-base-v2 (768D)</option>
+                        <option value="jina">Jina Code (768D)</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="method">Reduction Method:</label>
+                    <select id="method">
+                        <option value="pca">PCA (fast)</option>
+                        <option value="tsne">
+                            t-SNE (slow, better clusters)
+                        </option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="version">Version Filter:</label>
+                    <select id="version">
+                        <option value="">All versions</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="labelFilter">Label Filter:</label>
+                    <input
+                        type="text"
+                        id="labelFilter"
+                        placeholder="Filter by label"
+                    />
+                </div>
+
+                <div class="control-group">
+                    <label for="clustering">Clustering:</label>
+                    <select id="clustering" onchange="toggleClusteringParams()">
+                        <option value="hdbscan">HDBSCAN (auto-detect)</option>
+                        <option value="dbscan">DBSCAN</option>
+                        <option value="kmeans">K-Means</option>
+                        <option value="labels">User defined labels</option>
+                        <option value="none">None (by version)</option>
+                    </select>
+                </div>
+
+                <!-- K-Means parameters -->
+                <div
+                    class="control-group"
+                    id="nClustersGroup"
+                    style="display: none"
+                >
+                    <label for="nClusters">K (clusters):</label>
+                    <input
+                        type="number"
+                        id="nClusters"
+                        value="5"
+                        min="2"
+                        max="100"
+                    />
+                </div>
+
+                <!-- HDBSCAN parameters -->
+                <div
+                    class="control-group"
+                    id="minClusterSizeGroup"
+                    style="display: none"
+                >
+                    <label for="minClusterSize">Min cluster size:</label>
+                    <input
+                        type="number"
+                        id="minClusterSize"
+                        placeholder="auto"
+                        min="2"
+                        max="100"
+                    />
+                </div>
+
+                <div
+                    class="control-group"
+                    id="minSamplesHdbscanGroup"
+                    style="display: none"
+                >
+                    <label for="minSamplesHdbscan">Min samples:</label>
+                    <input
+                        type="number"
+                        id="minSamplesHdbscan"
+                        placeholder="auto"
+                        min="1"
+                        max="50"
+                    />
+                </div>
+
+                <!-- DBSCAN parameters -->
+                <div class="control-group" id="epsGroup" style="display: none">
+                    <label for="eps">Epsilon (eps):</label>
+                    <input
+                        type="number"
+                        id="eps"
+                        value="0.5"
+                        step="0.1"
+                        min="0.1"
+                        max="5.0"
+                    />
+                </div>
+
+                <div
+                    class="control-group"
+                    id="minSamplesDbscanGroup"
+                    style="display: none"
+                >
+                    <label for="minSamplesDbscan">Min samples:</label>
+                    <input
+                        type="number"
+                        id="minSamplesDbscan"
+                        value="2"
+                        min="1"
+                        max="20"
+                    />
+                </div>
+
+                <div class="control-group">
+                    <button onclick="loadVisualization()">
+                        🔄 Load Visualization
+                    </button>
+                </div>
+
+                <div class="control-group">
+                    <a
+                        id="apiLink"
+                        href="#"
+                        target="_blank"
+                        style="color: #66b3ff; text-decoration: none"
+                    >
+                        📊 API Endpoint
+                    </a>
+                </div>
+            </div>
+
+            <div id="plot"></div>
+        </div>
+
+        <script>
+            function updateURL() {
+                const model = document.getElementById("model").value;
+                const method = document.getElementById("method").value;
+                const version = document.getElementById("version").value;
+                const clustering = document.getElementById("clustering").value;
+                const labelFilter =
+                    document.getElementById("labelFilter").value;
+
+                const params = new URLSearchParams({
+                    model: model,
+                    method: method,
+                    clustering: clustering,
+                });
+
+                if (version) params.append("version", version);
+                if (labelFilter) params.append("label", labelFilter);
+
+                // K-Means parameters
+                if (clustering === "kmeans") {
+                    const nClusters =
+                        document.getElementById("nClusters").value;
+                    params.append("n_clusters", nClusters);
+                }
+
+                // HDBSCAN parameters
+                if (clustering === "hdbscan") {
+                    const minClusterSize =
+                        document.getElementById("minClusterSize").value;
+                    const minSamples =
+                        document.getElementById("minSamplesHdbscan").value;
+                    if (minClusterSize)
+                        params.append("min_cluster_size", minClusterSize);
+                    if (minSamples) params.append("min_samples", minSamples);
+                }
+
+                // DBSCAN parameters
+                if (clustering === "dbscan") {
+                    const eps = document.getElementById("eps").value;
+                    const minSamples =
+                        document.getElementById("minSamplesDbscan").value;
+                    if (eps) params.append("eps", eps);
+                    if (minSamples) params.append("min_samples", minSamples);
+                }
+
+                // Update browser URL without reload
+                const newUrl = `${window.location.pathname}?${params}`;
+                window.history.replaceState({}, "", newUrl);
+            }
+
+            function updateApiLink() {
+                const model = document.getElementById("model").value;
+                const method = document.getElementById("method").value;
+                const version = document.getElementById("version").value;
+                const clustering = document.getElementById("clustering").value;
+
+                const params = new URLSearchParams({
+                    model: model,
+                    method: method,
+                    clustering: clustering,
+                });
+
+                if (version) params.append("version", version);
+
+                // K-Means parameters
+                if (clustering === "kmeans") {
+                    const nClusters =
+                        document.getElementById("nClusters").value;
+                    params.append("n_clusters", nClusters);
+                }
+
+                // HDBSCAN parameters
+                if (clustering === "hdbscan") {
+                    const minClusterSize =
+                        document.getElementById("minClusterSize").value;
+                    const minSamples =
+                        document.getElementById("minSamplesHdbscan").value;
+                    if (minClusterSize)
+                        params.append("min_cluster_size", minClusterSize);
+                    if (minSamples) params.append("min_samples", minSamples);
+                }
+
+                // DBSCAN parameters
+                if (clustering === "dbscan") {
+                    const eps = document.getElementById("eps").value;
+                    const minSamples =
+                        document.getElementById("minSamplesDbscan").value;
+                    if (eps) params.append("eps", eps);
+                    if (minSamples) params.append("min_samples", minSamples);
+                }
+
+                const apiUrl = `/api/clusters?${params}&format=json`;
+                document.getElementById("apiLink").href = apiUrl;
+            }
+
+            function toggleClusteringParams() {
+                const clustering = document.getElementById("clustering").value;
+
+                // K-Means params
+                document.getElementById("nClustersGroup").style.display =
+                    clustering === "kmeans" ? "inline-block" : "none";
+
+                // HDBSCAN params
+                document.getElementById("minClusterSizeGroup").style.display =
+                    clustering === "hdbscan" ? "inline-block" : "none";
+                document.getElementById(
+                    "minSamplesHdbscanGroup",
+                ).style.display =
+                    clustering === "hdbscan" ? "inline-block" : "none";
+
+                // DBSCAN params
+                document.getElementById("epsGroup").style.display =
+                    clustering === "dbscan" ? "inline-block" : "none";
+                document.getElementById("minSamplesDbscanGroup").style.display =
+                    clustering === "dbscan" ? "inline-block" : "none";
+
+                // Update API link and URL when clustering changes
+                updateApiLink();
+                updateURL();
+            }
+
+            function loadParamsFromURL() {
+                const params = new URLSearchParams(window.location.search);
+
+                if (params.has("model"))
+                    document.getElementById("model").value =
+                        params.get("model");
+                if (params.has("method"))
+                    document.getElementById("method").value =
+                        params.get("method");
+                if (params.has("version"))
+                    document.getElementById("version").value =
+                        params.get("version");
+                if (params.has("label"))
+                    document.getElementById("labelFilter").value =
+                        params.get("label");
+                if (params.has("clustering")) {
+                    document.getElementById("clustering").value =
+                        params.get("clustering");
+                    toggleClusteringParams(); // Show/hide relevant params
+                }
+                if (params.has("n_clusters"))
+                    document.getElementById("nClusters").value =
+                        params.get("n_clusters");
+                if (params.has("min_cluster_size"))
+                    document.getElementById("minClusterSize").value =
+                        params.get("min_cluster_size");
+                if (params.has("min_samples")) {
+                    document.getElementById("minSamplesHdbscan").value =
+                        params.get("min_samples");
+                    document.getElementById("minSamplesDbscan").value =
+                        params.get("min_samples");
+                }
+                if (params.has("eps"))
+                    document.getElementById("eps").value = params.get("eps");
+            }
+
+            async function loadVisualization() {
+                const model = document.getElementById("model").value;
+                const method = document.getElementById("method").value;
+                const version = document.getElementById("version").value;
+                const clustering = document.getElementById("clustering").value;
+
+                const params = new URLSearchParams({
+                    model: model,
+                    method: method,
+                    clustering: clustering,
+                });
+
+                if (version) params.append("version", version);
+
+                // K-Means parameters
+                if (clustering === "kmeans") {
+                    const nClusters =
+                        document.getElementById("nClusters").value;
+                    params.append("n_clusters", nClusters);
+                }
+
+                // HDBSCAN parameters
+                if (clustering === "hdbscan") {
+                    const minClusterSize =
+                        document.getElementById("minClusterSize").value;
+                    const minSamples =
+                        document.getElementById("minSamplesHdbscan").value;
+                    if (minClusterSize)
+                        params.append("min_cluster_size", minClusterSize);
+                    if (minSamples) params.append("min_samples", minSamples);
+                }
+
+                // DBSCAN parameters
+                if (clustering === "dbscan") {
+                    const eps = document.getElementById("eps").value;
+                    const minSamples =
+                        document.getElementById("minSamplesDbscan").value;
+                    if (eps) params.append("eps", eps);
+                    if (minSamples) params.append("min_samples", minSamples);
+                }
+
+                const plot = document.getElementById("plot");
+
+                plot.innerHTML =
+                    '<div class="loading">Loading embeddings...</div>';
+
+                try {
+                    const response = await fetch(
+                        `/api/embeddings-3d?${params}`,
+                    );
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        plot.innerHTML = `<div class="loading">Error: ${data.error || "Failed to load"}</div>`;
+                        return;
+                    }
+
+                    // Apply label filter if specified (client-side filtering)
+                    const labelFilter =
+                        document.getElementById("labelFilter").value;
+                    let filteredPoints = data.points;
+                    if (labelFilter) {
+                        filteredPoints = data.points.filter(
+                            (p) => p.label === labelFilter,
+                        );
+                        if (filteredPoints.length === 0) {
+                            plot.innerHTML =
+                                '<div class="loading">No points match the specified label filter</div>';
+                            return;
+                        }
+                    }
+
+                    // Prepare data for Plotly
+                    const x = filteredPoints.map((p) => p.x);
+                    const y = filteredPoints.map((p) => p.y);
+                    const z = filteredPoints.map((p) => p.z);
+
+                    const text = filteredPoints.map((p) => {
+                        // Split by newlines, truncate each line to 100 chars, rejoin
+                        const lines = p.text_preview.split("\n");
+                        const truncatedLines = lines.map((line) => {
+                            if (line.length > 100) {
+                                return line.substring(0, 100) + "...";
+                            }
+                            return line;
+                        });
+                        const textWithBreaks = truncatedLines.join("<br>");
+
+                        return (
+                            `ID: ${p.id}<br>` +
+                            `Version: ${p.version}<br>` +
+                            `Entity: ${p.entity_id}<br>` +
+                            (p.label ? `<b>Label: ${p.label}</b><br>` : "") +
+                            (p.cluster !== undefined
+                                ? `Cluster: ${p.cluster}<br>`
+                                : "") +
+                            `Text:<br>${textWithBreaks}`
+                        );
+                    });
+
+                    // Use cluster for colors, noise points (-1) get grey
+                    const colors = filteredPoints.map((p) => {
+                        if (p.cluster !== undefined) {
+                            return p.cluster === -1 ? "grey" : p.cluster;
+                        }
+                        return p.version;
+                    });
+                    const colorLabel =
+                        data.n_clusters > 0 ? "Cluster" : "Version";
+
+                    // Make representatives larger with diamond shape
+                    const sizes = filteredPoints.map((p) =>
+                        p.is_representative ? 6 : 3,
+                    );
+                    const symbols = filteredPoints.map((p) =>
+                        p.is_representative ? "diamond" : "circle",
+                    );
+
+                    const trace = {
+                        x: x,
+                        y: y,
+                        z: z,
+                        mode: "markers",
+                        type: "scatter3d",
+                        text: text,
+                        hovertemplate: "%{text}<extra></extra>",
+                        marker: {
+                            size: sizes,
+                            symbol: symbols,
+                            color: colors,
+                            colorscale: "Rainbow",
+                            showscale: false,
+                            line: {
+                                color: filteredPoints.map((p) =>
+                                    p.is_representative
+                                        ? "white"
+                                        : "rgba(0,0,0,0)",
+                                ),
+                                width: filteredPoints.map((p) =>
+                                    p.is_representative ? 2 : 0,
+                                ),
+                            },
+                        },
+                    };
+
+                    const layout = {
+                        paper_bgcolor: "#2a2a2a",
+                        plot_bgcolor: "#2a2a2a",
+                        font: { color: "#fff" },
+                        hoverlabel: {
+                            bgcolor: "#1a1a1a",
+                            font: { size: 14, color: "#fff" },
+                            align: "left",
+                            namelength: -1,
+                        },
+                        scene: {
+                            xaxis: {
+                                title: "",
+                                backgroundcolor: "#2a2a2a",
+                                gridcolor: "#444",
+                                showbackground: true,
+                                showticklabels: false,
+                            },
+                            yaxis: {
+                                title: "",
+                                backgroundcolor: "#2a2a2a",
+                                gridcolor: "#444",
+                                showbackground: true,
+                                showticklabels: false,
+                            },
+                            zaxis: {
+                                title: "",
+                                backgroundcolor: "#2a2a2a",
+                                gridcolor: "#444",
+                                showbackground: true,
+                                showticklabels: false,
+                            },
+                        },
+                        margin: { l: 0, r: 0, b: 0, t: 0 },
+                    };
+
+                    Plotly.newPlot("plot", [trace], layout, {
+                        responsive: true,
+                    });
+                } catch (error) {
+                    plot.innerHTML = `<div class="loading">Error: ${error.message}</div>`;
+                }
+            }
+
+            // Load available versions
+            async function loadVersions() {
+                try {
+                    const response = await fetch("/api/versions");
+                    const data = await response.json();
+                    const versionSelect = document.getElementById("version");
+
+                    // Clear existing options except "All versions"
+                    versionSelect.innerHTML =
+                        '<option value="">All versions</option>';
+
+                    // Add version options
+                    data.versions.forEach((version) => {
+                        const option = document.createElement("option");
+                        option.value = version;
+                        option.textContent = version;
+                        versionSelect.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error("Failed to load versions:", error);
+                }
+            }
+
+            // Load visualization on page load
+            window.addEventListener("load", () => {
+                loadVersions().then(() => {
+                    // Load params from URL after versions are loaded
+                    loadParamsFromURL();
+                    // Then load visualization with those params
+                    loadVisualization();
+                    updateApiLink();
+                });
+
+                // Add event listeners to update API link and URL on control change
+                document
+                    .getElementById("model")
+                    .addEventListener("change", () => {
+                        updateApiLink();
+                        updateURL();
+                    });
+                document
+                    .getElementById("method")
+                    .addEventListener("change", () => {
+                        updateApiLink();
+                        updateURL();
+                    });
+                document
+                    .getElementById("version")
+                    .addEventListener("change", () => {
+                        updateApiLink();
+                        updateURL();
+                    });
+                document
+                    .getElementById("labelFilter")
+                    .addEventListener("input", updateURL);
+                document
+                    .getElementById("nClusters")
+                    .addEventListener("input", () => {
+                        updateApiLink();
+                        updateURL();
+                    });
+                document
+                    .getElementById("minClusterSize")
+                    .addEventListener("input", () => {
+                        updateApiLink();
+                        updateURL();
+                    });
+                document
+                    .getElementById("minSamplesHdbscan")
+                    .addEventListener("input", () => {
+                        updateApiLink();
+                        updateURL();
+                    });
+                document.getElementById("eps").addEventListener("input", () => {
+                    updateApiLink();
+                    updateURL();
+                });
+                document
+                    .getElementById("minSamplesDbscan")
+                    .addEventListener("input", () => {
+                        updateApiLink();
+                        updateURL();
+                    });
+            });
+        </script>
+    </body>
+</html>

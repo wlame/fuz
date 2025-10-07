@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: fuz-postgres
+    environment:
+      POSTGRES_DB: fuz_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fuz-network
+
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fuz-dev
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/app
+      - uv_cache:/root/.cache/uv
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - fuz-network
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=fuz_db
+      - DB_USER=postgres
+      - DB_PASSWORD=putyourpasswordhere
+      - DB_PORT=5432
+      - DJANGO_SETTINGS_MODULE=fuz.settings
+
+volumes:
+  postgres_data:
+  uv_cache:
+
+networks:
+  fuz-network:
+    driver: bridge
