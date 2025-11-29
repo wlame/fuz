@@ -3,6 +3,8 @@
 A pattern analysis and similarity search platform using Django, PostgreSQL, and vector embeddings for semantic text analysis.
 100% vibecoded before the internal hackathon days to prove some concepts.
 
+⚠️ Vibecode alert — This tool was implemented using LLMs.
+
 ## Features
 
 - ✅ **REST API** - Full CRUD operations for text patterns
